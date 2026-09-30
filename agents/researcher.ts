@@ -1,4 +1,4 @@
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { openrouter } from "@/lib/ai";
 import { FindingsSchema } from "@/schemas/finding";
 import { searchWeb } from "@/tools/search";
@@ -16,19 +16,24 @@ Content: ${result.content}
     )
     .join("\n\n");
 
-  const response = await generateObject({
+  const response = await generateText({
     model: openrouter("openai/gpt-4o-mini"),
-    schema: FindingsSchema,
+    output: Output.object({
+      schema: FindingsSchema,
+    }),
     prompt: `
-      Answer the research question using the sources below.
+      Research the following question using the provided sources.
 
       Research question:
       ${question}
 
       Sources:
       ${sources}
+
+      Return only factual findings supported by the sources.
+      Include the source URL for each finding.
     `,
   });
 
-  return response.object;
+  return response.output;
 }

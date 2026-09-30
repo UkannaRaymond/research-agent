@@ -9,11 +9,13 @@ export async function createResearchPlan(question: string) {
       schema: ResearchPlanSchema,
     }),
     prompt: `
-      Break this research question into smaller questions
-      that need to be answered.
+      Break this research question into exactly 5 smaller research questions.
 
       Research question:
       ${question}
+
+      Return only the 5 research questions.
+      Do not provide answers or explanations.
     `,
   });
 

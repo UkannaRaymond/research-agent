@@ -1,4 +1,4 @@
-import { createResearchPlan } from "@/agents/planner";
+import { runResearch } from "@/workflows/research";
 
 export async function POST(req: Request) {
   const { question } = await req.json();
@@ -7,7 +7,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Question is required" }, { status: 400 });
   }
 
-  const plan = await createResearchPlan(question);
+  const result = await runResearch(question);
 
-  return Response.json(plan);
+  return Response.json(result);
 }

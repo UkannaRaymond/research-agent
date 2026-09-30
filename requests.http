@@ -1,0 +1,6 @@
+POST http://localhost:3000/api/research
+Content-Type: application/json
+
+{
+  "question": "What are the effects of AI on software development?"
+}
