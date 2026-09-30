@@ -1,3 +1,4 @@
+import { critiqueResearch } from "@/agents/critic";
 import { createResearchPlan } from "@/agents/planner";
 import { researchQuestion } from "@/agents/researcher";
 import { writeResearchReport } from "@/agents/writer";
@@ -11,9 +12,12 @@ export async function runResearch(question: string) {
 
   const draft = await writeResearchReport(research);
 
+  const critique = await critiqueResearch(draft, research);
+
   return {
     plan,
     research,
     draft,
+    critique,
   };
 }
