@@ -1,5 +1,6 @@
 import { createResearchPlan } from "@/agents/planner";
 import { researchQuestion } from "@/agents/researcher";
+import { writeResearchReport } from "@/agents/writer";
 
 export async function runResearch(question: string) {
   const plan = await createResearchPlan(question);
@@ -8,8 +9,11 @@ export async function runResearch(question: string) {
     plan.questions.map((question) => researchQuestion(question)),
   );
 
+  const draft = await writeResearchReport(research);
+
   return {
     plan,
     research,
+    draft,
   };
 }
