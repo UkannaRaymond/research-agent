@@ -12,3 +12,7 @@ export const FindingsSchema = z.object({
 });
 
 export type Finding = z.infer<typeof FindingSchema>;
+
+export type FindingWithId = Finding & {
+  id: string;
+};

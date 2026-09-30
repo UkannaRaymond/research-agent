@@ -12,6 +12,7 @@
     "@openrouter/ai-sdk-provider": "^3.1.0",
     "@tavily/core": "^0.7.13",
     "ai": "^7.0.122",
+    "firecrawl": "^4.42.0",
     "next": "16.3.6",
     "react": "19.2.8",
     "react-dom": "19.2.8",
