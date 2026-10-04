@@ -1,13 +1,21 @@
 import { runResearch } from "@/workflows/research";
 
 export async function POST(req: Request) {
-  const { question } = await req.json();
+  try {
+    const { question } = await req.json();
 
-  if (!question) {
-    return Response.json({ error: "Question is required" }, { status: 400 });
+    if (!question) {
+      return Response.json({ error: "Question is required" }, { status: 400 });
+    }
+
+    const result = await runResearch(question);
+
+    return Response.json(result);
+  } catch (error) {
+    console.error("Research failed:", error);
+
+    const message = error instanceof Error ? error.message : "Research failed";
+
+    return Response.json({ error: message }, { status: 500 });
   }
-
-  const result = await runResearch(question);
-
-  return Response.json(result);
 }

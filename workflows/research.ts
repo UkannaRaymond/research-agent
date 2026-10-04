@@ -4,17 +4,34 @@ import { writeResearchReport } from "@/agents/writer";
 import { critiqueResearch } from "@/agents/critic";
 import type { FindingWithId } from "@/schemas/finding";
 import { generateText } from "ai";
-import { openrouter } from "@/lib/ai";
+import { MODELS, openrouter } from "@/lib/ai";
 import {
   repairSourcesSection,
   validateCitations,
 } from "@/workflows/validate-citations";
 
+const DEBUG = process.env.DEBUG_RESEARCH === "true";
+
+// Logs how long a step takes, even if it fails.
+async function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  if (!DEBUG) return fn();
+  const start = Date.now();
+  console.log(`${label}: started`);
+
+  try {
+    return await fn();
+  } finally {
+    console.log(`${label}: ${((Date.now() - start) / 1000).toFixed(1)}s`);
+  }
+}
+
 export async function runResearch(question: string) {
-  const plan = await createResearchPlan(question);
+  const plan = await timed("planner", () => createResearchPlan(question));
 
   const research = await Promise.all(
-    plan.questions.map((question) => researchQuestion(question)),
+    plan.questions.map((q, i) =>
+      timed(`researcher ${i + 1}`, () => researchQuestion(q)),
+    ),
   );
 
   const findings: FindingWithId[] = research
@@ -24,14 +41,27 @@ export async function runResearch(question: string) {
       id: `F${index + 1}`,
     }));
 
-  let draft = await writeResearchReport(findings);
+  const useCritic = process.env.ENABLE_CRITIC === "true";
 
-  let critique = await critiqueResearch(draft, findings);
+  let draft = await timed("writer", () => writeResearchReport(findings));
 
-  for (let attempt = 1; attempt < 2 && !critique.passed; attempt++) {
-    draft = await reviseResearchReport(draft, critique, findings);
+  let critique: Awaited<ReturnType<typeof critiqueResearch>> = {
+    passed: true,
+    issues: [],
+  };
 
-    critique = await critiqueResearch(draft, findings);
+  if (useCritic) {
+    critique = await timed("critic", () => critiqueResearch(draft, findings));
+
+    for (let attempt = 1; attempt < 2 && !critique.passed; attempt++) {
+      draft = await timed("revise", () =>
+        reviseResearchReport(draft, critique, findings),
+      );
+
+      critique = await timed("critic (after revise)", () =>
+        critiqueResearch(draft, findings),
+      );
+    }
   }
 
   // Deterministically rebuild Sources from citations in the final draft.
@@ -77,7 +107,9 @@ URL: ${finding.sourceUrl}
     .join("\n");
 
   const result = await generateText({
-    model: openrouter("openai/gpt-4o-mini"),
+    model: openrouter(MODELS.writer),
+    maxOutputTokens: 6000,
+    abortSignal: AbortSignal.timeout(240_000),
     prompt: `
 Revise the research report using the critic's feedback.
 

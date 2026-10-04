@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import { openrouter } from "@/lib/ai";
+import { MODELS, openrouter } from "@/lib/ai";
 import type { FindingWithId } from "@/schemas/finding";
 
 export async function writeResearchReport(findings: FindingWithId[]) {
@@ -16,7 +16,9 @@ URL: ${finding.sourceUrl}
     .join("\n");
 
   const response = await generateText({
-    model: openrouter("openai/gpt-4o-mini"),
+    model: openrouter(MODELS.writer),
+    abortSignal: AbortSignal.timeout(240_000), // 90 seconds
+    maxOutputTokens: 3000,
     prompt: `
 Write a clear research report using only the findings provided below.
 

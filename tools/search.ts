@@ -1,4 +1,5 @@
 import { tavily } from "@tavily/core";
+import { getSourceQuality } from "@/tools/source-quality";
 
 const client = tavily({
   apiKey: process.env.TAVILY_API_KEY,
@@ -9,5 +10,10 @@ export async function searchWeb(query: string) {
     maxResults: 5,
   });
 
-  return result.results;
+  return result.results
+    .map((result) => ({
+      ...result,
+      sourceQuality: getSourceQuality(result.url),
+    }))
+    .sort((a, b) => b.sourceQuality - a.sourceQuality);
 }

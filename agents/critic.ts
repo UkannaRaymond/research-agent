@@ -1,5 +1,4 @@
-import { generateText, Output } from "ai";
-import { openrouter } from "@/lib/ai";
+import { generateJSON, MODELS } from "@/lib/ai";
 import { CritiqueSchema } from "@/schemas/critique";
 import type { FindingWithId } from "@/schemas/finding";
 
@@ -19,11 +18,9 @@ URL: ${finding.sourceUrl}
     )
     .join("\n");
 
-  const response = await generateText({
-    model: openrouter("openai/gpt-4o-mini"),
-    output: Output.object({
-      schema: CritiqueSchema,
-    }),
+  return generateJSON({
+    model: MODELS.critic,
+    schema: CritiqueSchema,
     prompt: `
 Review the research report against the provided research findings.
 
@@ -60,8 +57,9 @@ ${draft}
 
 Research findings:
 ${sources}
+Respond with ONLY valid JSON in exactly this shape, no other text.
+"type" must be either "unsupported_claim" or "contradiction":
+{"passed":true,"issues":[{"type":"unsupported_claim","explanation":""}]}
 `,
   });
-
-  return response.output;
 }

@@ -1,26 +1,111 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f9f6f4;
+  --foreground: #100d0d;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Palette (accent colour is Tailwind's cyan-500, used directly) */
+  --color-canvas: #f9f6f4;
+  --color-ink: #100d0d;
+  --color-ink-muted: #4a4848;
+  --color-ink-faint: #7d7d7d;
+  --color-ink-subtle: #969493;
+  --color-line: #e6e4e2;
+  --color-fill: #edebeb;
+  --color-azure: #4da9e4;
+  --color-leaf: #90c94d;
+  --color-sun: #f4ba41;
+
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Dot grid background */
+.dot-grid {
+  background-image: radial-gradient(
+    circle,
+    rgba(16, 13, 13, 0.08) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+}
+
+/* Card shadow */
+.card-shadow {
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Results layout entrance */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-up-enter {
+  animation: slideUp 0.4s ease-out forwards;
+}
+
+.slide-up-delay-1 {
+  animation-delay: 0.1s;
+  opacity: 0;
+}
+
+/* Hero entrance */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-title {
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+.hero-subtitle {
+  animation: fadeInUp 0.6s ease-out 0.1s forwards;
+  opacity: 0;
+}
+
+.hero-badges {
+  animation: fadeInUp 0.6s ease-out 0.2s forwards;
+  opacity: 0;
+}
+
+.hero-search {
+  animation: fadeInUp 0.6s ease-out 0.3s forwards;
+  opacity: 0;
+}
+
+/* Source badge hover */
+.source-badge {
+  transition: all 0.2s ease;
+}
+
+.source-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
