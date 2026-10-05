@@ -43,22 +43,61 @@ const components: Components = {
     <strong className="font-semibold text-ink">{children}</strong>
   ),
 
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-cyan-600 underline underline-offset-2 hover:text-cyan-500"
-    >
-      {children}
-    </a>
-  ),
+  a: ({ href, children }) => {
+    // Citations such as [F1] are rendered as small chips that open the source.
+    const isCitation = /^F\d+$/.test(String(children));
+
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={isCitation ? href : undefined}
+        className={
+          isCitation
+            ? "mx-0.5 inline-block rounded bg-cyan-500/10 px-1 align-baseline text-[11px] font-medium leading-5 text-cyan-600 no-underline hover:bg-cyan-500/20"
+            : "text-cyan-600 underline underline-offset-2 hover:text-cyan-500"
+        }
+      >
+        {children}
+      </a>
+    );
+  },
 };
 
-export default function ReportMarkdown({ children }: { children: string }) {
+/** Turns [F1] (and [F1, F2]) into markdown links to each finding's source URL. */
+function linkCitations(markdown: string, citations: Record<string, string>) {
+  return markdown
+    .replace(/\[(F\d+(?:\s*[,;]\s*F\d+)+)\]/g, (_, list: string) =>
+      list
+        .split(/\s*[,;]\s*/)
+        .map((id) => `[${id}]`)
+        .join(""),
+    )
+    .replace(/\[(F\d+)\](?!\()/g, (match, id: string) => {
+      const url = citations[id];
+
+      return url
+        ? `[${id}](<${url.replace(/[<>\s]/g, (char) => encodeURIComponent(char))}>)`
+        : match;
+    });
+}
+
+interface ReportMarkdownProps {
+  children: string;
+  /** Finding ID -> source URL, used to make citations clickable. */
+  citations?: Record<string, string>;
+}
+
+export default function ReportMarkdown({
+  children,
+  citations = {},
+}: ReportMarkdownProps) {
   return (
     <div className={`break-words ${SECTION_BARS}`}>
-      <ReactMarkdown components={components}>{children}</ReactMarkdown>
+      <ReactMarkdown components={components}>
+        {linkCitations(children, citations)}
+      </ReactMarkdown>
     </div>
   );
 }

@@ -8,40 +8,44 @@ export async function researchQuestion(question: string) {
   const sources = results
     .map(
       (result) => `
-        Title: ${result.title}
-        URL: ${result.url}
-        Content: ${result.content.slice(0, 800)}
-`,
+    Title: ${result.title}
+    URL: ${result.url}
+    Content: ${result.content.slice(0, 800)}
+    `,
     )
     .join("\n\n");
-
-  const modelStart = Date.now();
 
   const findings = await generateJSON({
     model: MODELS.researcher,
     schema: FindingsSchema,
-    maxOutputTokens: 8000,
-    normalize: (value) => (Array.isArray(value) ? { findings: value } : value),
+    maxOutputTokens: 2500,
     prompt: `
-      Research the following question using the provided sources.
+Extract factual findings that help answer the research question using only the provided sources.
 
-      Research question:
-      ${question}
+Research question:
+${question}
 
-      Sources:
-      ${sources}
+Sources:
+${sources}
 
-      Return only factual findings supported by the sources.
-      Include the source URL for each finding.
-      Return at most 5 findings.
-      Keep each "evidence" value to 1-2 sentences taken from the source.
+Return at most 5 individual findings.
 
-      Respond with ONLY valid JSON in exactly this shape, no other text:
-      {"findings":[{"claim":"","evidence":"","sourceUrl":"","sourceTitle":""}]}
-    `,
+For each finding:
+- claim: one concise, factual statement
+- evidence: 1-2 sentences directly supported by the source
+- sourceUrl: exact URL of the supporting source
+- sourceTitle: exact title of the supporting source
+
+Important:
+- Do not summarize the overall research question.
+- Do not write a report.
+- Do not write an introduction or conclusion.
+- Do not create sections or headings.
+- Do not combine unrelated claims.
+- Do not infer or invent information.
+- Every finding must be supported by the provided sources.
+`,
   });
-
-  console.log(`model: ${((Date.now() - modelStart) / 1000).toFixed(1)}s`);
 
   return findings;
 }

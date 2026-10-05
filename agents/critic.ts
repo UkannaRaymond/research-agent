@@ -21,45 +21,42 @@ URL: ${finding.sourceUrl}
   return generateJSON({
     model: MODELS.critic,
     schema: CritiqueSchema,
+    maxOutputTokens: 2000,
     prompt: `
-Review the research report against the provided research findings.
+You are a fact-checker. Review the research report against the research findings.
 
-Your job is ONLY to identify:
-- unsupported factual claims
-- direct contradictions between factual claims
+Report only two kinds of problems:
+1. unsupported_claim: a sentence that states a fact, number, date, name, or relationship as established when the findings do not support it.
+2. contradiction: two statements in the report that cannot both be true, or a statement that conflicts with a finding.
 
-Do NOT evaluate citation formatting or citation correctness.
-Citation bookkeeping is handled separately by the application.
+How to read the report:
+- In the overview and the thematic sections, factual statements need support from the findings. A reasonable paraphrase or summary of a finding is supported.
+- The "Analysis", "Limitations and Open Questions", and "Conclusion" sections contain interpretation. Interpretation is NOT an unsupported claim when it is hedged (for example "may", "might", "is consistent with", "one reading is", "taken together ... point to") and rests on related findings. In these sections, report a sentence only if it states a cause-and-effect ("because", "drives", "in turn", "leads to"), a comparison ("more X than Y", "stronger than"), or a number as established fact AND no finding states it.
+- Statements about what the sources do not cover (limitations, gaps) are not unsupported claims.
 
-Rules for unsupported claims:
-- A claim is unsupported only when the provided findings do not reasonably support it.
-- Check the exact wording of the claim against the cited finding.
-- Do not demand that the finding use the exact same wording.
-- Do not reject a reasonable paraphrase.
-- Do not reject a narrower claim when the finding supports the broader fact.
-- Do not reject a claim merely because the finding does not quantify an effect.
-- Do not infer that a claim is unsupported merely because another finding could have been cited.
-- Do not require multiple findings when one finding adequately supports the claim.
-- Do not treat reasonable synthesis of directly related findings as unsupported.
-- Do not report missing citations. Citation validation is handled separately.
-- Do not report citation formatting problems.
+Do NOT report:
+- Paraphrases, summaries, or reasonable synthesis of related findings.
+- Wording slightly stronger or weaker than a finding that means the same thing.
+- Missing, wrong, or oddly formatted citations (handled separately).
+- Style, tone, or completeness.
 
-Rules for contradictions:
-- Only report a contradiction when two factual claims cannot both reasonably be true.
-- Different benefits and risks are not contradictions.
-- Different effects in different contexts are not contradictions.
-- Do not treat a limitation as a contradiction to a benefit.
+Be precise:
+- Report only clear problems. If you are unsure, do not report it.
+- Report at most 5 issues, most serious first.
+- "sentence" must be the full problem sentence copied EXACTLY, character for character, from the report, including its [F#] citations. Copy one sentence only, never a whole paragraph.
+- "explanation" says briefly which part is not supported and why.
+- Use "contradiction" only when two statements conflict. Cause-and-effect or "parallel" links that no finding states are "unsupported_claim".
+- If there are no clear problems, return an empty issues list.
 
-Do not rewrite the report.
+Research findings:
+${sources}
 
 Research report:
 ${draft}
 
-Research findings:
-${sources}
 Respond with ONLY valid JSON in exactly this shape, no other text.
 "type" must be either "unsupported_claim" or "contradiction":
-{"passed":true,"issues":[{"type":"unsupported_claim","explanation":""}]}
+{"issues":[{"type":"unsupported_claim","sentence":"","explanation":""}]}
 `,
   });
 }

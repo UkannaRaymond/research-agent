@@ -7,6 +7,12 @@ export default function Header() {
         <h1 className="text-xl font-semibold">
           <Link href="/">AI Research Agent</Link>
         </h1>
+        <Link
+          href="/history"
+          className="text-sm text-ink-muted transition-colors hover:text-cyan-500"
+        >
+          History
+        </Link>
       </div>
     </header>
   );

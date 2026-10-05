@@ -1,102 +1,64 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { generateText } from "ai";
+import { generateText, Output } from "ai";
 import type { z } from "zod";
 
 export const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-const FALLBACK = "qwen/qwen3.8-27b:free";
+const FALLBACK = "openai/gpt-4o-mini";
 
-export const MODELS = {
-  planner: process.env.PLANNER_MODEL || FALLBACK,
-  researcher: process.env.RESEARCHER_MODEL || FALLBACK,
-  writer: process.env.WRITER_MODEL || FALLBACK, // also used for revising
-  critic: process.env.CRITIC_MODEL || FALLBACK,
-};
+function modelFromEnv(key: string): string {
+  const value = process.env[key]?.trim() || FALLBACK;
 
-function extractJSONValues(text: string): unknown[] {
-  const results: unknown[] = [];
-
-  for (let start = 0; start < text.length; start++) {
-    const open = text[start];
-
-    if (open !== "{" && open !== "[") continue;
-
-    const close = open === "{" ? "}" : "]";
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-
-    for (let i = start; i < text.length; i++) {
-      const char = text[i];
-
-      if (inString) {
-        if (escaped) escaped = false;
-        else if (char === "\\") escaped = true;
-        else if (char === '"') inString = false;
-        continue;
-      }
-
-      if (char === '"') {
-        inString = true;
-      } else if (char === open) {
-        depth++;
-      } else if (char === close) {
-        depth--;
-
-        if (depth === 0) {
-          try {
-            results.push(JSON.parse(text.slice(start, i + 1)));
-          } catch {
-            // not valid JSON, try the next candidate
-          }
-          break;
-        }
-      }
-    }
+  if (!value.includes("/")) {
+    console.warn(
+      `${key}="${value}" is not a full OpenRouter model ID (expected "provider/model", e.g. "openai/gpt-4o-mini").`,
+    );
   }
 
-  return results;
+  return value;
 }
 
-export async function generateJSON<S extends z.ZodTypeAny>({
+export const MODELS = {
+  planner: modelFromEnv("PLANNER_MODEL"),
+  researcher: modelFromEnv("RESEARCHER_MODEL"),
+  writer: modelFromEnv("WRITER_MODEL"),
+  critic: modelFromEnv("CRITIC_MODEL"),
+};
+
+export async function generateJSON<S extends z.ZodType>({
   model,
   schema,
   prompt,
-  maxOutputTokens = 4000,
-  normalize,
+  maxOutputTokens = 2500,
 }: {
   model: string;
   schema: S;
   prompt: string;
   maxOutputTokens?: number;
-  normalize?: (value: unknown) => unknown;
 }): Promise<z.infer<S>> {
-  const { text, finishReason } = await generateText({
+  const result = await generateText({
     model: openrouter(model),
+    output: Output.object({ schema }),
     maxOutputTokens,
-    abortSignal: AbortSignal.timeout(180_000), // 180 seconds
+    maxRetries: 1,
+    abortSignal: AbortSignal.timeout(180_000),
     prompt,
   });
 
-  for (const candidate of extractJSONValues(text)) {
-    for (const value of [candidate, normalize?.(candidate)]) {
-      if (value === undefined) continue;
+  if (result.output == null) {
+    console.error("Structured output failed:", {
+      model,
+      finishReason: result.finishReason,
+    });
 
-      const parsed = schema.safeParse(value);
-
-      if (parsed.success) return parsed.data;
-    }
+    throw new Error(
+      result.finishReason === "length"
+        ? "Model output was cut off (hit the token limit)"
+        : "Model did not return valid structured output",
+    );
   }
 
-  console.error(
-    `Could not parse model output (finishReason: ${finishReason}):\n`,
-    text,
-  );
-  throw new Error(
-    finishReason === "length"
-      ? "Model output was cut off (hit the token limit)"
-      : "Model did not return JSON matching the expected shape",
-  );
+  return result.output as z.infer<S>;
 }

@@ -1,13 +1,15 @@
 interface SessionCardProps {
   label: string;
   question: string;
-  findingCount: number;
+  state: "searching" | "done" | "stopped";
+  findingCount?: number;
 }
 
 export default function SessionCard({
   label,
   question,
-  findingCount,
+  state,
+  findingCount = 0,
 }: SessionCardProps) {
   return (
     <div className="card-shadow overflow-hidden rounded-sm border border-line bg-white">
@@ -23,9 +25,15 @@ export default function SessionCard({
         <p className="line-clamp-3 text-xs leading-relaxed text-ink-muted">
           {question}
         </p>
-        <span className="self-end rounded-full bg-cyan-500/10 px-2 py-0.5 text-xs font-medium text-cyan-600">
-          {findingCount} {findingCount === 1 ? "finding" : "findings"}
-        </span>
+        {state === "done" ? (
+          <span className="self-end rounded-full bg-cyan-500/10 px-2 py-0.5 text-xs font-medium text-cyan-600">
+            {findingCount} {findingCount === 1 ? "finding" : "findings"}
+          </span>
+        ) : (
+          <span className="self-end rounded-full bg-fill px-2 py-0.5 text-xs text-ink-faint">
+            {state === "searching" ? "Searching…" : "Stopped"}
+          </span>
+        )}
       </div>
     </div>
   );

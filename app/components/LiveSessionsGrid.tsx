@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { ResearchResult, ResearchStatus } from "../types";
+import type { RunStatus } from "../types";
 import { formatTime } from "../lib/report";
 import SessionCard from "./SessionCard";
 import SessionCardSkeleton from "./SessionCardSkeleton";
@@ -7,25 +7,30 @@ import SessionCardSkeleton from "./SessionCardSkeleton";
 // The planner splits a question into this many research queries.
 const DEFAULT_QUERY_COUNT = 3;
 
-const BADGE_LABEL = {
-  loading: "active",
-  done: "complete",
-  error: "stopped",
-} as const;
-
 interface LiveSessionsGridProps {
-  status: Exclude<ResearchStatus, "idle">;
+  status: RunStatus;
   sessionTime: number;
-  result: ResearchResult | null;
+  /** Known once the planner has finished. */
+  questions: string[] | null;
+  /** Per-query progress, keyed by query index. */
+  queryProgress: Record<string, { findings: number }>;
 }
 
 export default function LiveSessionsGrid({
   status,
   sessionTime,
-  result,
+  questions,
+  queryProgress,
 }: LiveSessionsGridProps) {
-  const questions = result?.plan.questions ?? null;
   const count = questions?.length ?? DEFAULT_QUERY_COUNT;
+  const doneCount = Object.keys(queryProgress).length;
+
+  const badge =
+    status === "running"
+      ? `${Math.min(doneCount, count)} of ${count} done`
+      : status === "done"
+        ? `${count} complete`
+        : "stopped";
 
   return (
     <div className="slide-up-enter mb-6 w-full">
@@ -35,7 +40,7 @@ export default function LiveSessionsGrid({
             Research queries
           </span>
           <span className="rounded-sm bg-azure/20 px-2 py-0.5 text-xs text-azure">
-            {count} {BADGE_LABEL[status]}
+            {badge}
           </span>
         </div>
 
@@ -66,15 +71,26 @@ export default function LiveSessionsGrid({
         className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
         style={{ "--cols": count } as CSSProperties}
       >
-        {status === "done" && result && questions
-          ? questions.map((question, index) => (
-              <SessionCard
-                key={index}
-                label={`Query ${index + 1}`}
-                question={question}
-                findingCount={result.research[index]?.findings.length ?? 0}
-              />
-            ))
+        {questions
+          ? questions.map((question, index) => {
+              const progress = queryProgress[String(index)];
+
+              return (
+                <SessionCard
+                  key={index}
+                  label={`Query ${index + 1}`}
+                  question={question}
+                  state={
+                    progress
+                      ? "done"
+                      : status === "error"
+                        ? "stopped"
+                        : "searching"
+                  }
+                  findingCount={progress?.findings}
+                />
+              );
+            })
           : Array.from({ length: count }, (_, index) => (
               <SessionCardSkeleton
                 key={index}

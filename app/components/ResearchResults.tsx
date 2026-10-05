@@ -1,4 +1,5 @@
 import type { Report, ResultsTab } from "../types";
+import ReportChecks from "./ReportChecks";
 import ReportMarkdown from "./ReportMarkdown";
 import SectionTitle from "./SectionTitle";
 import SourceCard from "./SourceCard";
@@ -54,7 +55,9 @@ export default function ResearchResults({
           report ? (
             <div className="space-y-6">
               {report.body ? (
-                <ReportMarkdown>{report.body}</ReportMarkdown>
+                <ReportMarkdown citations={report.citations}>
+                  {report.body}
+                </ReportMarkdown>
               ) : (
                 <section>
                   <SectionTitle barClassName="bg-cyan-500">Overview</SectionTitle>
@@ -94,6 +97,13 @@ export default function ResearchResults({
                   </p>
                 )}
               </section>
+
+              {report.body && (
+                <ReportChecks
+                  citationValidation={report.citationValidation}
+                  critique={report.critique}
+                />
+              )}
             </div>
           ) : isResearching ? (
             <div className="animate-pulse space-y-3">

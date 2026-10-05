@@ -6,6 +6,7 @@ export async function createResearchPlan(question: string) {
   const result = await generateText({
     model: openrouter(MODELS.planner),
     maxOutputTokens: 2000,
+    maxRetries: 1,
     abortSignal: AbortSignal.timeout(90_000), // 90 seconds
     prompt: `
       Break this research question into exactly 3 smaller research questions.

@@ -15,15 +15,52 @@ export function getDomain(url: string): string {
 }
 
 /**
- * Splits the draft into its markdown body and a list of cited sources.
- * The UI renders its own Sources section, so the draft's is dropped.
+ * Key used to recognise the same article behind different URLs
+ * (www, http/https, trailing slash, #fragment, tracking parameters).
+ */
+export function normalizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (/^(utm_|fbclid$|gclid$|mc_)/i.test(key)) {
+        parsed.searchParams.delete(key);
+      }
+    }
+
+    const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    const path = parsed.pathname.replace(/\/+$/, "") || "/";
+
+    return `${host}${path}${parsed.search}`;
+  } catch {
+    return url.trim();
+  }
+}
+
+// A line that is only a "Sources" / "References" heading, however it is written:
+// "## Sources", "### Sources", "Sources", "**Sources**", "## Sources:", ...
+const SOURCES_HEADING =
+  /^[ \t]*(?:#{1,6}[ \t]*|\*\*[ \t]*)?(?:sources|references)[ \t]*:?[ \t]*(?:\*\*)?[ \t]*\r?$/im;
+
+/** Drops the draft's own Sources section; the UI renders a single, deduplicated one. */
+export function stripSourcesSection(draft: string): string {
+  const match = SOURCES_HEADING.exec(draft);
+
+  return (match ? draft.slice(0, match.index) : draft).trim();
+}
+
+/**
+ * Splits the draft into its markdown body and a deduplicated list of
+ * cited sources (one entry per article, however many findings it supports).
  */
 export function parseReport(result: ResearchResult): Report {
-  const [rawBody = ""] = result.draft.split(/^## Sources$/m);
-  const body = rawBody.trim();
+  const body = stripSourcesSection(result.draft);
 
+  // Matches [F1] as well as combined forms such as [F1, F2].
   const cited = new Set(
-    [...body.matchAll(/\[(F\d+)\]/g)].map((match) => match[1]),
+    [...body.matchAll(/\[(F\d+(?:\s*[,;]\s*F\d+)*)\]/g)].flatMap((match) =>
+      match[1].split(/\s*[,;]\s*/),
+    ),
   );
 
   const findings = cited.size
@@ -33,13 +70,17 @@ export function parseReport(result: ResearchResult): Report {
   const groups = new Map<string, SourceGroup>();
 
   for (const finding of findings) {
-    const existing = groups.get(finding.sourceUrl);
+    const key = normalizeUrl(finding.sourceUrl);
+    const existing = groups.get(key);
 
     if (existing) {
       existing.ids.push(finding.id);
-      existing.claims.push(finding.claim);
+
+      if (!existing.claims.includes(finding.claim)) {
+        existing.claims.push(finding.claim);
+      }
     } else {
-      groups.set(finding.sourceUrl, {
+      groups.set(key, {
         url: finding.sourceUrl,
         title: finding.sourceTitle || getDomain(finding.sourceUrl),
         domain: getDomain(finding.sourceUrl),
@@ -49,5 +90,15 @@ export function parseReport(result: ResearchResult): Report {
     }
   }
 
-  return { body, sources: [...groups.values()] };
+  const citations = Object.fromEntries(
+    result.findings.map((finding) => [finding.id, finding.sourceUrl]),
+  );
+
+  return {
+    body,
+    sources: [...groups.values()],
+    citations,
+    citationValidation: result.citationValidation,
+    critique: result.critique,
+  };
 }

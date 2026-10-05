@@ -2,7 +2,10 @@ import { generateText } from "ai";
 import { MODELS, openrouter } from "@/lib/ai";
 import type { FindingWithId } from "@/schemas/finding";
 
-export async function writeResearchReport(findings: FindingWithId[]) {
+export async function writeResearchReport(
+  question: string,
+  findings: FindingWithId[],
+) {
   const sources = findings
     .map(
       (finding) => `
@@ -17,44 +20,45 @@ URL: ${finding.sourceUrl}
 
   const response = await generateText({
     model: openrouter(MODELS.writer),
-    abortSignal: AbortSignal.timeout(240_000), // 90 seconds
-    maxOutputTokens: 3000,
+    maxOutputTokens: 6000,
+    maxRetries: 2,
+    abortSignal: AbortSignal.timeout(240_000),
     prompt: `
-Write a clear research report using only the findings provided below.
+You are a research analyst. Write an in-depth research report that answers the research question, using only the findings provided below.
 
-Requirements:
-- Organize the report with clear Markdown headings.
-- Synthesize related findings only when the findings explicitly support the relationship between them.
-- Use only information explicitly supported by the findings.
-- Do not infer broader conclusions from a finding.
-- Do not generalize a finding beyond its stated evidence, population, task, tool, or context.
-- Do not invent facts.
-- Cite supporting findings using their exact IDs, for example [F1] or [F12].
-- Never invent, renumber, or change finding IDs.
-- Every factual sentence must have a citation that directly supports it.
-- Only cite a finding when its evidence directly supports the claim being made.
-- Keep claims narrow when the evidence is narrow.
-- Do not include specific numbers, percentages, dates, or other precise details unless they are directly supported by the cited finding.
-- Do not describe evidence as "significant", "substantial", "major", "neutral", or "slight" unless the finding explicitly supports that characterization.
-- Do not use intensifiers such as "significantly", "substantially", "major", or "dramatically" unless the finding explicitly supports that strength.
-- Do not infer causation unless the finding explicitly establishes causation.
-- Do not use phrases such as "may lead to", "results in", "contributes to", "causes", "suggests", or "indicates" unless the cited finding explicitly supports that relationship.
-- Do not combine findings to create a stronger claim than any individual finding supports.
-- Do not add comparisons between groups unless the finding explicitly makes that comparison.
-- Do not add conclusions about future outcomes unless the findings explicitly support them.
-- Do not make claims about the effectiveness, reliability, or limitations of AI tools unless the cited finding explicitly makes that claim.
-- Do not make claims about project-management integration unless the citation directly supports that claim.
-- Do not turn findings into recommendations, instructions, or advice unless the finding itself is explicitly presented as a recommendation.
-- Do not introduce words such as "should", "must", "need to", "essential", or "crucial" unless the cited finding explicitly uses or supports that normative conclusion.
-- Do not add claims about what the research does or does not document unless that limitation is explicitly supported by the findings.
+Research question:
+${question}
+
+Structure (Markdown):
+- "# " A specific title for the topic.
+- "## Overview": one short paragraph (3-4 sentences) that answers the question directly and states the main takeaways.
+- 3 to 5 thematic "## " sections. Group findings by theme, not by source. In each section write two or three substantial paragraphs of connected prose: what the evidence shows, how findings relate (agree, add detail, or differ), and why it matters. Use a short bullet list only to name discrete items.
+- "## Analysis": what the findings indicate when taken together. Point out patterns, tensions, and differences between sources. Write these as hedged observations ("The findings are consistent with...", "One reading is...", "Taken together, ... point to...") and cite the findings they rest on. Do not state causes or comparisons as fact ("because", "drives", "in turn", "more X than Y", "stronger than") unless a finding says so.
+- "## Limitations and Open Questions": what the evidence does not cover, where it is thin, dated, promotional, or secondary, and where sources disagree. Base this only on the findings and sources provided.
+- "## Conclusion": two or three sentences.
+
+Depth:
+- Aim for roughly 700 to 1000 words.
+- Explain and connect; do not write one short sentence per finding.
+
+Grounding rules:
+- Every fact, name, number, and date must come from the findings. Do not add outside facts, figures, or examples.
+- Analysis and interpretation are welcome when they follow from the cited findings. Make clear when you are interpreting (for example "taken together", "this points to") and cite the findings the interpretation rests on.
+- Match the strength of your wording to the strength of the evidence. Do not claim causation unless a finding states it. Do not generalize beyond the context a finding describes.
+- When only one source supports a point, or sources disagree, say so.
+- Every sentence in the Overview, Analysis, and Conclusion must end with at least one [F#] citation. If you cannot cite a sentence, leave it out.
+- The Conclusion may only restate points already made above, with their citations. Do not add new framing or trends ("becoming", "increasingly", "shifting") that no finding states.
+- Do not describe two developments as parallel, matched, or pressuring each other unless a single finding says so.
+- Do not give recommendations unless a finding presents one.
 - Do not mention the research process.
 
-Sources section:
-- End with a "Sources" section.
-- Include every finding cited in the report.
-- Do not include uncited findings.
-- Use the exact finding ID beside each source.
-- Include the source title and URL.
+Citation rules:
+- Cite with the exact finding ID in its own plain square brackets right after the supporting statement, for example [F1] or [F1][F4].
+- Use only the ASCII characters [ and ]. Never use 【F1】, (F1), or ranges such as F1-F5.
+- Never combine IDs inside one bracket (not [F1, F4]).
+- Never invent, renumber, or change IDs. Only cite a finding when it directly supports the statement.
+- Several findings can come from the same article. Cite whichever ID supports the statement.
+- Do NOT write a Sources or References section. The application adds it automatically.
 
 Research findings:
 ${sources}

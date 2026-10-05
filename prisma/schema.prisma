@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ResearchRun {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  visitorId           String    @map("visitor_id") @db.Uuid
+  question            String
+  status              String    @default("running")
+  stage               String?
+  plan                Json?
+  queryProgress       Json      @default("{}") @map("query_progress")
+  research            Json?
+  findings            Json?
+  draft               String?
+  citationValidation  Json?     @map("citation_validation")
+  critique            Json?
+  error               String?
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt         DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  @@index([visitorId, createdAt], map: "research_runs_visitor_created_idx")
+  @@map("research_runs")
+}

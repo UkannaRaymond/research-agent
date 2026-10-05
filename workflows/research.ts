@@ -3,18 +3,43 @@ import { researchQuestion } from "@/agents/researcher";
 import { writeResearchReport } from "@/agents/writer";
 import { critiqueResearch } from "@/agents/critic";
 import type { FindingWithId } from "@/schemas/finding";
-import { generateText } from "ai";
-import { MODELS, openrouter } from "@/lib/ai";
+import type { Critique, CritiqueResult } from "@/schemas/critique";
+import { normalizeCitations } from "@/workflows/normalize-citations";
 import {
   repairSourcesSection,
   validateCitations,
 } from "@/workflows/validate-citations";
 
-const DEBUG = process.env.DEBUG_RESEARCH === "true";
+export type ResearchStage =
+  | "planning"
+  | "researching"
+  | "writing"
+  | "reviewing"
+  | "revising";
 
-// Logs how long a step takes, even if it fails.
+/** Optional progress callbacks (used to persist progress while a run is going). */
+export interface ResearchHooks {
+  onStage?: (stage: ResearchStage) => void | Promise<void>;
+  onPlan?: (plan: { questions: string[] }) => void | Promise<void>;
+  onQueryDone?: (
+    index: number,
+    result: { findings: unknown[] },
+  ) => void | Promise<void>;
+}
+
+// Progress reporting must never break the research itself.
+async function emit(callback: () => void | Promise<void>) {
+  try {
+    await callback();
+  } catch (error) {
+    console.error("Progress update failed:", error);
+  }
+}
+
+// Logs how long each step takes when DEBUG_RESEARCH=true.
 async function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
-  if (!DEBUG) return fn();
+  if (process.env.DEBUG_RESEARCH !== "true") return fn();
+
   const start = Date.now();
   console.log(`${label}: started`);
 
@@ -25,13 +50,21 @@ async function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
-export async function runResearch(question: string) {
+export async function runResearch(question: string, hooks: ResearchHooks = {}) {
+  const criticEnabled = process.env.ENABLE_CRITIC === "true";
+
+  await emit(() => hooks.onStage?.("planning"));
   const plan = await timed("planner", () => createResearchPlan(question));
+  await emit(() => hooks.onPlan?.(plan));
 
   const research = await Promise.all(
-    plan.questions.map((q, i) =>
-      timed(`researcher ${i + 1}`, () => researchQuestion(q)),
-    ),
+    plan.questions.map(async (q, i) => {
+      const result = await timed(`researcher ${i + 1}`, () =>
+        researchQuestion(q),
+      );
+      await emit(() => hooks.onQueryDone?.(i, result));
+      return result;
+    }),
   );
 
   const findings: FindingWithId[] = research
@@ -41,27 +74,33 @@ export async function runResearch(question: string) {
       id: `F${index + 1}`,
     }));
 
-  const useCritic = process.env.ENABLE_CRITIC === "true";
+  await emit(() => hooks.onStage?.("writing"));
+  let draft = normalizeCitations(
+    await timed("writer", () => writeResearchReport(question, findings)),
+  );
 
-  let draft = await timed("writer", () => writeResearchReport(findings));
+  // null when the critic is switched off (ENABLE_CRITIC is not "true").
+  let critique: Critique | null = null;
 
-  let critique: Awaited<ReturnType<typeof critiqueResearch>> = {
-    passed: true,
-    issues: [],
-  };
+  if (criticEnabled) {
+    await emit(() => hooks.onStage?.("reviewing"));
+    const review = await timed("critic", () =>
+      critiqueResearch(draft, findings),
+    );
 
-  if (useCritic) {
-    critique = await timed("critic", () => critiqueResearch(draft, findings));
+    // Delete flagged sentences in code: no extra model calls, and the
+    // removal is guaranteed (a rewrite can reintroduce the same claim).
+    const cleaned = removeFlaggedSentences(draft, review.issues);
+    draft = cleaned.draft;
 
-    for (let attempt = 1; attempt < 2 && !critique.passed; attempt++) {
-      draft = await timed("revise", () =>
-        reviseResearchReport(draft, critique, findings),
-      );
-
-      critique = await timed("critic (after revise)", () =>
-        critiqueResearch(draft, findings),
-      );
-    }
+    critique = {
+      passed: cleaned.remaining.length === 0,
+      issues: cleaned.remaining.map(({ type, explanation }) => ({
+        type,
+        explanation,
+      })),
+      removed: cleaned.removed,
+    };
   }
 
   // Deterministically rebuild Sources from citations in the final draft.
@@ -79,63 +118,31 @@ export async function runResearch(question: string) {
   };
 }
 
-async function reviseResearchReport(
-  draft: string,
-  critique: {
-    passed: boolean;
-    issues: {
-      type: string;
-      explanation: string;
-    }[];
-  },
-  findings: FindingWithId[],
-) {
-  const issues = critique.issues
-    .map((issue) => `- ${issue.type}: ${issue.explanation}`)
-    .join("\n");
+type FlaggedIssue = CritiqueResult["issues"][number];
 
-  const sources = findings
-    .map(
-      (finding) => `
-[${finding.id}]
-Claim: ${finding.claim}
-Evidence: ${finding.evidence}
-Source: ${finding.sourceTitle}
-URL: ${finding.sourceUrl}
-`,
-    )
-    .join("\n");
+/** Removes each flagged sentence that can be found verbatim in the draft. */
+function removeFlaggedSentences(draft: string, issues: FlaggedIssue[]) {
+  let out = draft;
+  let removed = 0;
+  const remaining: FlaggedIssue[] = [];
 
-  const result = await generateText({
-    model: openrouter(MODELS.writer),
-    maxOutputTokens: 6000,
-    abortSignal: AbortSignal.timeout(240_000),
-    prompt: `
-Revise the research report using the critic's feedback.
+  for (const issue of issues) {
+    const sentence = issue.sentence.trim();
 
-Fix every issue identified by the critic.
+    // Too short or multi-line means the model did not copy a single sentence.
+    if (
+      sentence.length >= 20 &&
+      !sentence.includes("\n") &&
+      out.includes(sentence)
+    ) {
+      out = out.replace(sentence, "");
+      removed += 1;
+    } else {
+      remaining.push(issue);
+    }
+  }
 
-Rules:
-- Use only information supported by the research findings.
-- Remove unsupported claims.
-- Do not invent facts or sources.
-- Keep useful information that is already supported.
-- Preserve Markdown headings.
-- Keep source citations.
-- Use the finding IDs exactly as provided.
-- Never invent, renumber, or change finding IDs.
-- Do not mention the revision process.
+  out = out.replace(/(\S) {2,}(?=\S)/g, "$1 ").replace(/\n{3,}/g, "\n\n");
 
-Critic feedback:
-${issues}
-
-Current report:
-${draft}
-
-Research findings:
-${sources}
-`,
-  });
-
-  return result.text;
+  return { draft: out, removed, remaining };
 }

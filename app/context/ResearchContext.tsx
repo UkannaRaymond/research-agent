@@ -3,114 +3,70 @@
 import {
   createContext,
   useContext,
-  useEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
-import type { ResearchResult, ResearchStatus } from "../types";
-
-// A full run can take several minutes on slow models.
-const REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
+import { useRouter } from "next/navigation";
 
 interface ResearchContextType {
+  /** Text in the search box (shared by the landing and results pages). */
   query: string;
   setQuery: (query: string) => void;
-  status: ResearchStatus;
-  isResearching: boolean;
-  result: ResearchResult | null;
-  error: string | null;
-  sessionTime: number;
+  /** True while the request that creates a run is in flight. */
+  isStarting: boolean;
+  startError: string | null;
+  /** Creates a run and opens its page, /results/[id]. */
   startResearch: (searchQuery?: string) => Promise<void>;
 }
 
 const ResearchContext = createContext<ResearchContextType | null>(null);
 
 export function ResearchProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<ResearchStatus>("idle");
-  const [result, setResult] = useState<ResearchResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [sessionTime, setSessionTime] = useState(0);
-  const abortRef = useRef<AbortController | null>(null);
-
-  const isResearching = status === "loading";
-
-  // Session timer: counts up while research runs, then holds its value.
-  useEffect(() => {
-    if (status !== "loading") return;
-
-    const startedAt = Date.now();
-    const id = setInterval(() => {
-      setSessionTime(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
-
-    return () => clearInterval(id);
-  }, [status]);
+  const [isStarting, setIsStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  // State updates are async, so a fast double click would pass an isStarting check.
+  const startingRef = useRef(false);
 
   const startResearch = async (searchQuery?: string) => {
     const q = (searchQuery ?? query).trim();
-    if (!q) return;
 
-    // A newer run replaces any run still in flight.
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    if (!q || startingRef.current) return;
 
+    startingRef.current = true;
     setQuery(q);
-    setStatus("loading");
-    setResult(null);
-    setError(null);
-    setSessionTime(0);
+    setIsStarting(true);
+    setStartError(null);
 
     try {
       const response = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: q }),
-        signal: controller.signal,
       });
 
       const data = await response.json().catch(() => null);
 
-      if (!response.ok) {
-        throw new Error(data?.error ?? "Research failed");
+      if (!response.ok || !data?.id) {
+        throw new Error(data?.error ?? "Could not start the research");
       }
 
-      if (abortRef.current !== controller) return;
-
-      setResult(data as ResearchResult);
-      setStatus("done");
-    } catch (err) {
-      // Superseded by a newer run: ignore.
-      if (abortRef.current !== controller) return;
-
-      setError(
-        err instanceof Error && err.name === "AbortError"
-          ? "Research timed out. Try again or use a faster model."
-          : err instanceof Error
-            ? err.message
-            : "Research failed",
+      router.push(`/results/${data.id}`);
+    } catch (error) {
+      setStartError(
+        error instanceof Error ? error.message : "Could not start the research",
       );
-      setStatus("error");
     } finally {
-      clearTimeout(timeout);
+      startingRef.current = false;
+      setIsStarting(false);
     }
   };
 
   return (
     <ResearchContext.Provider
-      value={{
-        query,
-        setQuery,
-        status,
-        isResearching,
-        result,
-        error,
-        sessionTime,
-        startResearch,
-      }}
+      value={{ query, setQuery, isStarting, startError, startResearch }}
     >
       {children}
     </ResearchContext.Provider>

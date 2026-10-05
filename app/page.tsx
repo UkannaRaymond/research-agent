@@ -1,32 +1,23 @@
 /**
  * Home Page
  *
- * Landing page with the search interface. Starts research and
- * navigates to /results.
+ * Landing page with the search interface. Starting research creates a run
+ * and opens its page, /results/[id].
  */
 
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useResearch } from "./context/ResearchContext";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
 import SearchBar from "./components/SearchBar";
 import ExampleQueries from "./components/ExampleQueries";
+import ErrorBanner from "./components/ErrorBanner";
 import Footer from "./components/Footer";
 
 export default function Home() {
-  const router = useRouter();
-  const { query, setQuery, isResearching, startResearch } = useResearch();
-
-  const handleSearch = (searchQuery?: string) => {
-    const q = (searchQuery ?? query).trim();
-    if (!q) return;
-
-    // State is set synchronously, so /results never sees an empty query.
-    void startResearch(q);
-    router.push("/results");
-  };
+  const { query, setQuery, isStarting, startError, startResearch } =
+    useResearch();
 
   return (
     <div className="dot-grid relative flex min-h-screen flex-col overflow-hidden bg-canvas font-sans text-ink">
@@ -46,10 +37,15 @@ export default function Home() {
           <SearchBar
             query={query}
             setQuery={setQuery}
-            isResearching={isResearching}
-            onSearch={() => handleSearch()}
+            isResearching={isStarting}
+            onSearch={() => startResearch()}
           />
-          <ExampleQueries onSelect={(example) => handleSearch(example)} />
+          <ExampleQueries onSelect={(example) => startResearch(example)} />
+          {startError && (
+            <div className="mt-6">
+              <ErrorBanner error={startError} />
+            </div>
+          )}
         </div>
       </main>
 
