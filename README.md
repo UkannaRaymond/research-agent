@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Research Agent
 
-## Getting Started
+Ask a question and the agent researches it across the web, then writes a cited report. A critic checks the report and strips any claim the sources don't support.
 
-First, run the development server:
+## How it works
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+Question → Planner → Researchers (in parallel) → Writer → Critic → Report
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1. **Planner** splits the question into focused search queries.
+2. **Researchers** run one per query, searching the web (Tavily), reading pages (Firecrawl) and extracting cited findings.
+3. **Writer** drafts a report where every claim cites a finding (`[F1]`, `[F2]`, …).
+4. **Critic** flags unsupported claims and contradictions. Flagged sentences are removed in code, not rewritten.
+5. **Checks** confirm every citation matches a source, then the report is stored.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Runs execute in the background and are saved to Postgres, so you can leave the page, come back from **History**, or share `/results/<id>`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Stack
 
-## Learn More
+Next.js (App Router) · TypeScript · Tailwind CSS · Vercel AI SDK + OpenRouter · Tavily · Firecrawl · Prisma + PostgreSQL
 
-To learn more about Next.js, take a look at the following resources:
+## Getting started
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm install
+cp .env.example .env      # then fill in the values below
+pnpm exec prisma migrate dev --config prisma7.config.ts
+pnpm dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open [http://localhost:3000](http://localhost:3000).
 
-## Deploy on Vercel
+## Environment variables
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Variable                                                            | Purpose                                         |
+| ------------------------------------------------------------------- | ----------------------------------------------- |
+| `DATABASE_URL`                                                      | PostgreSQL connection string                    |
+| `OPENROUTER_API_KEY`                                                | LLM access                                      |
+| `TAVILY_API_KEY`                                                    | Web search                                      |
+| `FIRECRAWL_API_KEY`                                                 | Page scraping                                   |
+| `PLANNER_MODEL`, `RESEARCHER_MODEL`, `WRITER_MODEL`, `CRITIC_MODEL` | OpenRouter model IDs, e.g. `openai/gpt-4o-mini` |
+| `ENABLE_CRITIC`                                                     | `true` to run the critic step                   |
+| `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MINUTES`                       | Per-visitor limit on new runs                   |
+| `DEBUG_RESEARCH`                                                    | Optional. Logs timing for each pipeline step    |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project structure
+
+```
+agents/      planner, researcher, writer, critic
+workflows/   the research pipeline
+tools/       Tavily search, Firecrawl scrape, source quality scoring
+schemas/     Zod schemas for model output
+lib/         AI client, database access, rate limiting
+app/         pages, components and API routes
+```
+
+## Cost notes
+
+One search makes up to 6–7 LLM calls plus a few Tavily and Firecrawl requests. Use a smaller model for the planner and researchers, and keep the stronger one for the writer and critic.
+
+## Status
+
+In active development.
